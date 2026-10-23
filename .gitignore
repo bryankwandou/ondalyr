@@ -1,0 +1,12 @@
+node_modules
+.next
+.env*
+!.env.example
+*keypair*.json
+id.json
+anchor/target
+.vercel
+build.log
+*.log
+next-env.d.ts
+tsconfig.tsbuildinfo

@@ -1,0 +1,20 @@
+[package]
+name = "listen-ledger"
+version = "0.1.0"
+description = "Per-minute listening payments, boosts and curator shares"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "listen_ledger"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
