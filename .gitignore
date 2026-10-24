@@ -10,3 +10,6 @@ build.log
 *.log
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+.vercel
+.env*

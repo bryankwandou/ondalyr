@@ -14,6 +14,7 @@ const results = [];
 const check = async (name, fn) => {
   try { await fn(); results.push(["PASS", name]); }
   catch (e) { results.push(["FAIL", name, String(e.message || e).split("\n")[0]]); }
+  console.log(results.at(-1).join("  "));
 };
 const shot = (p, n) => p.screenshot({ path: new URL(n, out).pathname.replace(/^\/(\w:)/, "$1") });
 

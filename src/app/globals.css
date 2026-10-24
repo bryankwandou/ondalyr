@@ -29,6 +29,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* The fanned 3D cover stack reaches past narrow viewports; clip keeps sticky positioning intact. */
+html, body { overflow-x: clip; }
 body {
   background: var(--bg);
   color: var(--text);
