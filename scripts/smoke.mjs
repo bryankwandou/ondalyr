@@ -2,6 +2,7 @@
 // Saves screenshots to docs/shots so the report can show what was checked.
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || "playwright");
@@ -16,13 +17,26 @@ const check = async (name, fn) => {
   catch (e) { results.push(["FAIL", name, String(e.message || e).split("\n")[0]]); }
   console.log(results.at(-1).join("  "));
 };
-const shot = (p, n) => p.screenshot({ path: new URL(n, out).pathname.replace(/^\/(\w:)/, "$1") });
+// fileURLToPath decodes %20, so paths with spaces land in the real folder.
+const at = (n) => fileURLToPath(new URL(n, out));
+const shot = (p, n) => p.screenshot({ path: at(n) });
+
+// html/body use overflow-x: clip, so scrollWidth no longer shows a too-wide layout.
+// Count elements past the right edge instead, skipping ones inside their own scroll
+// strip and the decorative cover stack that is clipped on purpose.
+const overflowing = (p) => p.evaluate(() => [...document.querySelectorAll("body *")].filter((e) => {
+  if (e.getBoundingClientRect().right <= innerWidth + 1 || e.closest(".hero-visual")) return false;
+  for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
+    if (getComputedStyle(a).overflowX !== "visible") return false;
+  }
+  return true;
+}).map((e) => `${e.tagName.toLowerCase()}.${[...e.classList].join(".")}`).slice(0, 5));
 
 const browser = await chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
 const errors = [];
 
 for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["phone", { width: 390, height: 844 }]]) {
-  const ctx = await browser.newContext({ viewport, recordVideo: label === "desktop" ? { dir: new URL("../docs/video/", import.meta.url).pathname.replace(/^\/(\w:)/, "$1"), size: viewport } : undefined });
+  const ctx = await browser.newContext({ viewport, recordVideo: label === "desktop" ? { dir: fileURLToPath(new URL("../docs/video/", import.meta.url)), size: viewport } : undefined });
   const p = await ctx.newPage();
   p.on("pageerror", (e) => errors.push(`${label}: ${e.message}`));
 
@@ -31,9 +45,9 @@ for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["ph
     await p.getByRole("heading", { level: 1 }).waitFor();
     await shot(p, `${label}-landing.png`);
   });
-  await check(`${label}: no horizontal scroll`, async () => {
-    const over = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-    if (over > 1) throw new Error(`overflow ${over}px`);
+  await check(`${label}: landing fits the viewport`, async () => {
+    const over = await overflowing(p);
+    if (over.length) throw new Error(`past the right edge: ${over.join(", ")}`);
   });
   await check(`${label}: alignment demo reacts to the slider`, async () => {
     await p.locator("#how").scrollIntoViewIfNeeded();
@@ -42,7 +56,7 @@ for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["ph
     await p.waitForTimeout(400);
     const after = await p.locator(".found strong").textContent();
     if (before === after) throw new Error(`offset stayed ${after}`);
-    await p.locator("#how").screenshot({ path: new URL(`${label}-align.png`, out).pathname.replace(/^\/(\w:)/, "$1") });
+    await p.locator("#how").screenshot({ path: at(`${label}-align.png`) });
   });
   await check(`${label}: cost demo updates`, async () => {
     await p.locator("#cost").scrollIntoViewIfNeeded();
@@ -50,7 +64,7 @@ for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["ph
     await p.waitForTimeout(400);
     const n = await p.locator(".cost-facts dt").first().textContent();
     if (n !== "34") throw new Error(`expected 34 requests, got ${n}`);
-    await p.locator("#cost").screenshot({ path: new URL(`${label}-cost.png`, out).pathname.replace(/^\/(\w:)/, "$1") });
+    await p.locator("#cost").screenshot({ path: at(`${label}-cost.png`) });
   });
   await check(`${label}: language switch to Indonesian`, async () => {
     await p.locator(".l-nav .lang button", { hasText: "ID" }).click();
@@ -58,16 +72,24 @@ for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["ph
     await p.locator(".l-nav .lang button", { hasText: "EN" }).click();
   });
 
-  await check(`${label}: player loads songs and plays one`, async () => {
+  await check(`${label}: player fits the viewport`, async () => {
     await p.goto(`${base}/listen`, { waitUntil: "domcontentloaded" });
     await p.locator(".row").first().waitFor({ timeout: 20000 });
-    await p.locator(".row").first().click();
-    await p.waitForFunction(() => [...document.querySelectorAll("video")].some((v) => !v.paused && v.currentTime > 1), null, { timeout: 20000 });
-    await p.waitForTimeout(2500);
-    await shot(p, `${label}-player.png`);
+    const over = await overflowing(p);
+    if (over.length) throw new Error(`past the right edge: ${over.join(", ")}`);
   });
-  await check(`${label}: lyrics appear for the playing song`, async () => {
-    await p.locator(".lyrics").first().waitFor({ timeout: 15000 });
+  // Search a song LRCLIB is known to have, so the lyrics check can't pass on an empty panel.
+  await check(`${label}: searched song plays`, async () => {
+    await p.locator(".searchbar input").fill("Coldplay Yellow");
+    await p.locator(".row", { hasText: "Yellow" }).first().waitFor({ timeout: 20000 });
+    await p.locator(".row", { hasText: "Yellow" }).first().click();
+    // The desktop context also records video, which slows startup; allow for it.
+    await p.waitForFunction(() => [...document.querySelectorAll("video")].some((v) => !v.paused && v.currentTime > 1), null, { timeout: 40000 });
+  });
+  await check(`${label}: lyric lines appear for the playing song`, async () => {
+    await p.locator(".lyrics .line").first().waitFor({ timeout: 20000 });
+    await p.waitForTimeout(4000);
+    await shot(p, `${label}-player.png`);
   });
   await check(`${label}: orbwave mode draws`, async () => {
     await p.getByRole("tab", { name: "Orbwave" }).click();
