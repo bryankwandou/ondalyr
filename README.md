@@ -2,6 +2,14 @@
 
 A light browser player for songs, music videos, live radio and podcasts. When a 30-second preview starts in the middle of a song, Ondalyr transcribes the clip, finds where it sits in the full track, and shifts the synced lyrics to match.
 
+Live: https://ondalyr.vercel.app · Player: https://ondalyr.vercel.app/listen
+
+![Landing page on desktop](docs/shots/desktop-landing.png)
+
+| Player with re-timed lyrics | Orbwave stage | Phone, 390 px |
+| --- | --- | --- |
+| ![Player](docs/shots/desktop-player.png) | ![Orbwave](docs/shots/desktop-orbwave.png) | ![Phone stage](docs/shots/phone-stage.png) |
+
 ## What it does
 
 | Area | How |
@@ -33,6 +41,31 @@ npm run dev
 ```
 
 Both variables are optional. Without `GROQ_API_KEY`, lyrics show without re-timing. Without `DATABASE_URL`, tallies are accepted and dropped.
+
+## Checks
+
+`scripts/smoke.mjs` drives Chrome against a running build at 1440×900 and 390×844 and saves the screenshots in `docs/shots`. The desktop pass is also recorded to `docs/video`.
+
+```bash
+node scripts/smoke.mjs https://ondalyr.vercel.app
+```
+
+It checks that each page has no element past the right edge, that the alignment and cost demos react to their sliders, that the language switch works, that a searched song (Coldplay, "Yellow") plays and shows lyric lines, that Orbwave draws and radio stations load, that `/api/tally` accepts a batch, and that no page throws an uncaught error. The last run against the live site passed 23 of 23 checks; full output is in [docs/smoke-result.txt](docs/smoke-result.txt). The desktop recording of that run is [docs/video/smoke-desktop.webm](docs/video/smoke-desktop.webm). It is an unnarrated test run, not a walkthrough.
+
+Earlier runs caught two layout bugs that are now fixed: on phones the player grid was 522 px wide inside a 390 px screen, and in Cover mode the album art grew past its row and sat under the lyrics.
+
+| Alignment demo | Cost demo | Radio on a phone |
+| --- | --- | --- |
+| ![Alignment demo](docs/shots/desktop-align.png) | ![Cost demo](docs/shots/desktop-cost.png) | ![Radio](docs/shots/phone-radio.png) |
+
+## Known limits
+
+- Songs and music videos are 30-second iTunes previews, not full tracks.
+- Lyrics come from LRCLIB. Many tracks in the iTunes trending list, especially low-profile uploads, have no entry there, and the player says so instead of showing a guess.
+- Re-timing needs `GROQ_API_KEY`. Without it, synced lyrics run from the start of the full track and drift from the clip.
+- The search box is shared across tabs, so a song search carries over to radio and podcasts.
+- Devnet receipts need Phantom or Solflare. They are not covered by the smoke script and have not yet been tested end to end against the live site.
+- The `anchor/` program is not deployed.
 
 ## Layout
 

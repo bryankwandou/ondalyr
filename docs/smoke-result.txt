@@ -1,0 +1,48 @@
+PASS  desktop: landing renders hero
+PASS  desktop: landing fits the viewport
+PASS  desktop: alignment demo reacts to the slider
+PASS  desktop: cost demo updates
+PASS  desktop: language switch to Indonesian
+PASS  desktop: player fits the viewport
+PASS  desktop: searched song plays
+PASS  desktop: lyric lines appear for the playing song
+PASS  desktop: orbwave mode draws
+PASS  desktop: radio list loads
+PASS  desktop: tally batch accepted
+PASS  phone: landing renders hero
+PASS  phone: landing fits the viewport
+PASS  phone: alignment demo reacts to the slider
+PASS  phone: cost demo updates
+PASS  phone: language switch to Indonesian
+PASS  phone: player fits the viewport
+PASS  phone: searched song plays
+PASS  phone: lyric lines appear for the playing song
+PASS  phone: orbwave mode draws
+PASS  phone: radio list loads
+PASS  phone: tally batch accepted
+PASS  no uncaught page errors
+PASS  desktop: landing renders hero
+PASS  desktop: landing fits the viewport
+PASS  desktop: alignment demo reacts to the slider
+PASS  desktop: cost demo updates
+PASS  desktop: language switch to Indonesian
+PASS  desktop: player fits the viewport
+PASS  desktop: searched song plays
+PASS  desktop: lyric lines appear for the playing song
+PASS  desktop: orbwave mode draws
+PASS  desktop: radio list loads
+PASS  desktop: tally batch accepted
+PASS  phone: landing renders hero
+PASS  phone: landing fits the viewport
+PASS  phone: alignment demo reacts to the slider
+PASS  phone: cost demo updates
+PASS  phone: language switch to Indonesian
+PASS  phone: player fits the viewport
+PASS  phone: searched song plays
+PASS  phone: lyric lines appear for the playing song
+PASS  phone: orbwave mode draws
+PASS  phone: radio list loads
+PASS  phone: tally batch accepted
+PASS  no uncaught page errors
+
+23/23 passed
