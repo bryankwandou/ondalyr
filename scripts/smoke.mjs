@@ -97,6 +97,8 @@ for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["ph
     await shot(p, `${label}-orbwave.png`);
   });
   await check(`${label}: radio list loads`, async () => {
+    // The search box is shared across tabs; clear the song query so radio lists stations.
+    await p.locator(".searchbar input").fill("");
     await p.locator(".nav", { hasText: /radio/i }).first().click();
     await p.locator(".row").first().waitFor({ timeout: 20000 });
     await shot(p, `${label}-radio.png`);
