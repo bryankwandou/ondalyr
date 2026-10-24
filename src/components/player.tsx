@@ -8,6 +8,7 @@ import { countPlay, countSeconds } from "@/lib/tally";
 
 export type StageMode = "cover" | "video" | "orbwave";
 type LyricState = { status: "idle" | "loading" | "none" | "ready"; data?: Lyrics; offset: number; align: "none" | "pending" | "done" | "failed" };
+export type OnAir = { now: string | null; history: { title: string; at: string }[] };
 
 interface Ctx {
   t: Dict;
@@ -24,6 +25,7 @@ interface Ctx {
   mode: StageMode;
   setMode(m: StageMode): void;
   lyrics: LyricState;
+  onAir: OnAir | null;
   playList(list: Item[], at: number): void;
   toggle(): void;
   next(): void;
@@ -64,6 +66,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<StageMode>("cover");
   const [lyrics, setLyrics] = useState<LyricState>({ status: "idle", offset: 0, align: "none" });
   const [listened, setListened] = useState(0);
+  const [onAir, setOnAir] = useState<OnAir | null>(null);
 
   const els = useRef<{ analysed: HTMLVideoElement; raw: HTMLVideoElement } | null>(null);
   const audio = useRef<{ ctx: AudioContext; an: AnalyserNode } | null>(null);
@@ -188,7 +191,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       .then(async (data) => {
         if (cancelled) return;
         if (!data) return setLyrics({ status: "none", offset: 0, align: "none" });
-        const canAlign = data.synced && current.kind === "song";
+        // A full track already matches the LRC timestamps; only previews need re-timing.
+        const canAlign = data.synced && !!current.preview;
         setLyrics({ status: "ready", data, offset: 0, align: canAlign ? "pending" : "none" });
         if (!canAlign) return;
         const url = new URL(current.src, location.href).searchParams.get("u");
@@ -202,6 +206,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => !cancelled && setLyrics({ status: "none", offset: 0, align: "none" }));
     return () => { cancelled = true; };
+  }, [current]);
+
+  // Radio: what the station says it is airing, plus the log the recorder keeps.
+  useEffect(() => {
+    setOnAir(null);
+    if (!current || current.kind !== "radio") return;
+    const station = current.id.slice(1);
+    let live = true;
+    const load = () =>
+      fetch(`/api/aired?id=${station}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: OnAir | null) => live && d && setOnAir(d))
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { live = false; clearInterval(id); };
   }, [current]);
 
   const playList = useCallback((list: Item[], at: number) => {
@@ -253,9 +273,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<Ctx>(() => ({
     t: dict[lang], lang, setLang, queue, index, current, playing, time, duration, volume, error,
-    mode, setMode, lyrics, playList, toggle, next, prev, seek, setVolume, media: active, bands, listened,
+    mode, setMode, lyrics, onAir, playList, toggle, next, prev, seek, setVolume, media: active, bands, listened,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [lang, queue, index, current, playing, time, duration, volume, error, mode, lyrics, playList, toggle, next, prev, seek, setVolume, active, bands, listened]);
+  }), [lang, queue, index, current, playing, time, duration, volume, error, mode, lyrics, onAir, playList, toggle, next, prev, seek, setVolume, active, bands, listened]);
 
   return (
     <PlayerCtx.Provider value={value}>

@@ -187,6 +187,10 @@ h1, h2, h3 { font-family: var(--font-display), var(--font-geist-sans), sans-seri
   transform-origin: left center;
 }
 .line.past { color: color-mix(in oklch, var(--paper) 50%, transparent); }
+/* Radio log reuses the lyric column: newest first, no karaoke fill. */
+.aired .lyrics-scroll { padding: 6px 0; mask-image: linear-gradient(black 80%, transparent); }
+.aired .line { font-size: 15px; cursor: default; --fill: 100%; }
+.aired-at { font-family: var(--font-sans, inherit); font-size: 12px; font-weight: 500; opacity: 0.6; margin-right: 6px; }
 .line.on {
   transform: scale(1.04);
   background: linear-gradient(90deg, var(--paper) var(--fill, 0%), color-mix(in oklch, var(--paper) 55%, transparent) var(--fill, 0%));

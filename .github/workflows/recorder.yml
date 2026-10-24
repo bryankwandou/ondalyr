@@ -1,0 +1,29 @@
+# Runs scripts/recorder.mts around the clock. Each run lasts just under six
+# hours (the job limit) and the next one is already queued by then, so the
+# concurrency group hands over with a gap of about a minute.
+name: radio recorder
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: radio-recorder
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: node scripts/recorder.mts
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RUN_MINUTES: "340"

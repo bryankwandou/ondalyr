@@ -6,14 +6,14 @@ import { PlayerProvider, usePlayer } from "./player";
 import { PlayerBar } from "./bar";
 import { Stage } from "./stage";
 import { Logo } from "./logo";
-import { LedgerView, MusicView, PodcastView, RadioView, VideoView } from "./views";
+import { FullView, LedgerView, MusicView, PodcastView, RadioView, VideoView } from "./views";
 
-type Tab = "music" | "videos" | "radio" | "podcasts" | "ledger";
-const TABS: Tab[] = ["music", "videos", "radio", "podcasts", "ledger"];
+type Tab = "full" | "music" | "videos" | "radio" | "podcasts" | "ledger";
+const TABS: Tab[] = ["full", "music", "videos", "radio", "podcasts", "ledger"];
 
 function Inner() {
   const { t, lang, setLang } = usePlayer();
-  const [tab, setTab] = useState<Tab>("music");
+  const [tab, setTab] = useState<Tab>("full");
   const [raw, setRaw] = useState("");
   const [q, setQ] = useState("");
 
@@ -48,6 +48,7 @@ function Inner() {
             <input type="search" value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={t.searchPlaceholder} aria-label={t.search} />
           </div>
         )}
+        {tab === "full" && <FullView q={q} />}
         {tab === "music" && <MusicView q={q} />}
         {tab === "videos" && <VideoView q={q} />}
         {tab === "radio" && <RadioView q={q} />}

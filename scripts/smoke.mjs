@@ -78,8 +78,18 @@ for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["ph
     const over = await overflowing(p);
     if (over.length) throw new Error(`past the right edge: ${over.join(", ")}`);
   });
+  // The default tab streams whole Audius tracks; a preview would report about 30 s.
+  await check(`${label}: full track plays past the preview length`, async () => {
+    await p.locator(".row").first().click();
+    const len = await p.waitForFunction(
+      () => [...document.querySelectorAll("video")].find((v) => !v.paused && v.currentTime > 1)?.duration,
+      null, { timeout: 40000 },
+    ).then((h) => h.jsonValue());
+    if (!(len > 60)) throw new Error(`duration ${len}s`);
+  });
   // Search a song LRCLIB is known to have, so the lyrics check can't pass on an empty panel.
   await check(`${label}: searched song plays`, async () => {
+    await p.locator(".nav", { hasText: /previews/i }).first().click();
     await p.locator(".searchbar input").fill("Coldplay Yellow");
     await p.locator(".row", { hasText: "Yellow" }).first().waitFor({ timeout: 20000 });
     await p.locator(".row", { hasText: "Yellow" }).first().click();
@@ -102,6 +112,14 @@ for (const [label, viewport] of [["desktop", { width: 1440, height: 900 }], ["ph
     await p.locator(".nav", { hasText: /radio/i }).first().click();
     await p.locator(".row").first().waitFor({ timeout: 20000 });
     await shot(p, `${label}-radio.png`);
+  });
+  await check(`${label}: station reports what it is airing`, async () => {
+    const r = await p.evaluate(async () => {
+      const st = await (await fetch("https://de1.api.radio-browser.info/json/stations/search?name=Classic%20Vinyl%20HD&limit=1")).json();
+      const res = await fetch(`/api/aired?id=${st[0].stationuuid}`);
+      return { status: res.status, body: await res.json() };
+    });
+    if (r.status !== 200 || !r.body.now) throw new Error(JSON.stringify(r).slice(0, 200));
   });
   await check(`${label}: tally batch accepted`, async () => {
     const status = await p.evaluate(async () => {

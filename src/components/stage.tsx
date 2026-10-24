@@ -114,7 +114,7 @@ function VideoSlot() {
 }
 
 export function Stage() {
-  const { current, mode, setMode, t, error } = usePlayer();
+  const { current, mode, setMode, t, error, onAir } = usePlayer();
   if (!current) {
     return (
       <section className="stage empty" aria-label="Stage">
@@ -138,7 +138,7 @@ export function Stage() {
           ))}
         </div>
         {current.live && <span className="live-pill">{t.live}</span>}
-        {current.kind === "song" && <span className="meta-pill">{t.preview}</span>}
+        {current.kind === "song" && <span className="meta-pill">{current.preview ? t.preview : t.fullTrack}</span>}
       </div>
 
       <div className="stage-body">
@@ -152,11 +152,24 @@ export function Stage() {
           {error && <p className="note warn">{t.loadFailed}</p>}
         </div>
         {(current.kind === "song" || current.kind === "video") && <Lyrics />}
+        {current.kind === "radio" && (
+          <aside className="lyrics aired" aria-label={t.aired}>
+            <p className="lyrics-status">{onAir ? t.airedNote : t.lyricsLoading}</p>
+            <div className="lyrics-scroll">
+              {onAir && !onAir.history.length && <p className="line">{t.noTitles}</p>}
+              {onAir?.history.map((h, k) => (
+                <p key={h.at} className={k === 0 && h.title === onAir.now ? "line on" : "line past"}>
+                  <span className="num aired-at">{new Date(h.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> {h.title}
+                </p>
+              ))}
+            </div>
+          </aside>
+        )}
       </div>
 
       <div className="stage-title">
         <h1>{current.title}</h1>
-        <p>{current.artist}</p>
+        <p>{current.kind === "radio" && onAir?.now ? onAir.now : current.artist}</p>
       </div>
     </section>
   );

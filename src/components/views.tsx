@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePlayer } from "./player";
-import { loadEpisodes, searchPodcasts, searchRadio, searchSongs, searchVideos, type Item, type Show } from "@/lib/sources";
+import { loadEpisodes, searchFull, searchPodcasts, searchRadio, searchSongs, searchVideos, type Item, type Show } from "@/lib/sources";
 import { airdrop, connect, recordListen } from "@/lib/solana";
 
 function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
@@ -63,6 +63,20 @@ function State({ err, loading }: { err: boolean; loading: boolean }) {
   if (err) return <p className="muted pad">{t.loadFailed}</p>;
   if (loading) return <div className="skeleton" aria-busy="true"><i /><i /><i /><i /></div>;
   return null;
+}
+
+export function FullView({ q }: { q: string }) {
+  const { t } = usePlayer();
+  const songs = useLoad(() => searchFull(q), [q]);
+  return (
+    <div className="view">
+      <h2>{q ? `“${q}”` : t.trending}</h2>
+      <p className="muted lede">{t.fullIntro}</p>
+      <State err={songs.err} loading={!songs.data} />
+      {songs.data && <Tiles items={songs.data.slice(0, 6)} />}
+      {songs.data && <Rows items={songs.data} />}
+    </div>
+  );
 }
 
 export function MusicView({ q }: { q: string }) {

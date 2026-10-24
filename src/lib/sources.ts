@@ -15,6 +15,8 @@ export interface Item {
   analysable: boolean;
   hasVideo: boolean;
   live: boolean;
+  // A preview is a 30-second excerpt that starts mid-song; its lyrics need re-timing.
+  preview?: boolean;
   durationSec?: number;
 }
 
@@ -50,7 +52,46 @@ export async function searchSongs(term: string): Promise<Item[]> {
       analysable: true,
       hasVideo: false,
       live: false,
+      preview: true,
       durationSec: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : undefined,
+    }));
+}
+
+// Audius streams whole tracks that artists uploaded themselves, free and
+// without a key. Both the API redirect and the content node send
+// Access-Control-Allow-Origin: *, so the analyser can read them directly.
+const AUDIUS = "https://api.audius.co/v1";
+const APP = "app_name=ondalyr";
+
+interface AudiusTrack {
+  id: string;
+  title: string;
+  duration: number;
+  is_streamable: boolean;
+  artwork?: Record<string, string> | null;
+  user: { name: string; is_deactivated?: boolean };
+}
+
+export async function searchFull(term: string): Promise<Item[]> {
+  const url = term
+    ? `${AUDIUS}/tracks/search?query=${encodeURIComponent(term)}&limit=30&${APP}`
+    : `${AUDIUS}/tracks/trending?limit=30&${APP}`;
+  const r = await fetch(url);
+  const j = (await r.json()) as { data: AudiusTrack[] };
+  return j.data
+    .filter((t) => t.is_streamable && !t.user.is_deactivated)
+    .map((t) => ({
+      id: `sa${t.id}`,
+      kind: "song",
+      title: t.title,
+      artist: t.user.name,
+      art: t.artwork?.["480x480"] || "",
+      src: `${AUDIUS}/tracks/${t.id}/stream?${APP}`,
+      analysable: true,
+      hasVideo: false,
+      live: false,
+      preview: false,
+      durationSec: t.duration,
     }));
 }
 

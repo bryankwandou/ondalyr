@@ -14,9 +14,10 @@ Live: https://ondalyr.vercel.app · Player: https://ondalyr.vercel.app/listen
 
 | Area | How |
 | --- | --- |
-| Songs | iTunes Search previews, relayed same-origin through `/api/media` so the Web Audio analyser can read them |
+| Full tracks | Whole songs from Audius (independent artists, free, no key). Its streams send `Access-Control-Allow-Origin: *`, so Orbwave reads the real audio and LRCLIB timings apply as they are |
+| Song previews | iTunes Search previews, relayed same-origin through `/api/media` so the Web Audio analyser can read them |
 | Music videos | iTunes music-video previews, played on the stage with lyrics alongside |
-| Live radio | Radio Browser directory, HTTPS and non-HLS streams only |
+| Live radio | Radio Browser directory, HTTPS and non-HLS streams only, with a log of what each station airs (below) |
 | Podcasts | iTunes podcast search, then the RSS feed parsed by `/api/rss` |
 | Lyrics | LRCLIB synced lyrics, re-timed by `/api/align` (Whisper on Groq, offset voting) |
 | Stage | Cover, video, or Orbwave (72 mirrored spectrum bands) |
@@ -30,6 +31,19 @@ Seconds are counted in the browser and kept in `localStorage`, so the count is e
 For one listener with the radio on 24 hours a day, that comes to at most about 98 requests and one row a day. Writing once per second would be 86,400 requests. `GET /api/tally` (the weekly chart) is cached at the CDN for five minutes, so page views do not reach the database.
 
 No Blob store is used. Listening data is a few integers per row, and Postgres handles that fine. A Blob store would only make sense for user uploads or exports, and the app has neither.
+
+## Radio log
+
+`scripts/recorder.mts` keeps a log of what up to 100 stations air, around the clock. It runs in GitHub Actions ([recorder.yml](.github/workflows/recorder.yml)): each job lasts about 5 h 40 min, and the next one is already queued in the same concurrency group, so the handover gap is about a minute.
+
+- **Which stations:** any station someone plays in Ondalyr comes first, then the most-clicked HTTPS stations under pop, hits, top 40, dance, rock, kpop and indonesia tags. Streams listed twice under different ids are skipped. A station that sends no title ten times in a row is dropped.
+- **How:** every 45 seconds it opens each stream, reads the first ICY metadata block (`StreamTitle`, usually after 16 KB of audio), and closes it. Almost every song runs longer than 45 seconds, so a song is still caught, and the job downloads about a sixtieth of what holding 100 streams open would.
+- **What counts as a song:** `cleanTitle` in `src/lib/aired.ts` drops station names and slogans, ads, URLs, numeric catalogue ids and anything without both an artist and a title. Every rule comes from a title seen in the first test run.
+- **What is stored:** each distinct song once in `song` (with play and station counts), and each airing as one `(station, song, at)` row in `aired`. Airings older than 30 days are deleted; songs are kept.
+- **Hits first:** a song is a hit when one of its artist names exactly equals an artist on Deezer's overall or 21 genre charts (about 1,100 names, refreshed daily). Hits are always stored. Other songs are stored only while the database is under 350 MB (`BUDGET_BYTES`), so the free 512 MB tier never fills up.
+- Only titles are stored. No audio is recorded.
+
+A 6-minute test run against 100 stations wrote 127 airings of 115 songs, 14 of them hits, at about 50 bytes per airing.
 
 ## Setup
 
@@ -60,7 +74,8 @@ Earlier runs caught two layout bugs that are now fixed: on phones the player gri
 
 ## Known limits
 
-- Songs and music videos are 30-second iTunes previews, not full tracks.
+- Full tracks come only from Audius, which is mostly independent artists. Mainstream songs and music videos are still 30-second iTunes previews.
+- The radio log trusts what stations announce. A station that sends wrong or no metadata is logged wrong or not at all.
 - Lyrics come from LRCLIB. Many tracks in the iTunes trending list, especially low-profile uploads, have no entry there, and the player says so instead of showing a guess.
 - Re-timing needs `GROQ_API_KEY`. Without it, synced lyrics run from the start of the full track and drift from the clip.
 - The search box is shared across tabs, so a song search carries over to radio and podcasts.
