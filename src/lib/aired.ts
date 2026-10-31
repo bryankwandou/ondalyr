@@ -23,7 +23,8 @@ export function norm(s: string): string {
 // rule below comes from a real station in the first recorder run: the station's
 // own name, ads and fillers, URLs, numeric catalogue ids, "+"-encoded titles.
 export function cleanTitle(raw: string, station: string): string | null {
-  let title = raw.replace(/^\s*(now playing|on air|playing)\s*[:\-]\s*/i, "").trim();
+  // Some stations prefix the artist with a byte-order mark or zero-width space.
+  let title = raw.replace(/[​-‍﻿]/g, "").replace(/^\s*(now playing|on air|playing)\s*[:\-]\s*/i, "").trim();
   if (!title.includes(" ") && title.includes("+")) title = title.replace(/\+/g, " ");
   // "… - Classic Vinyl on walmradio.com": drop a trailing segment that is a plug.
   title = title.replace(/\s+-\s+[^-]*\b[\w-]+\.(com|net|org|fm)\b[^-]*$/i, "").replace(/\s*-\s*$/, "").trim();

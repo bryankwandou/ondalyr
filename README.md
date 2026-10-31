@@ -15,6 +15,7 @@ Live: https://ondalyr.vercel.app · Player: https://ondalyr.vercel.app/listen
 | Area | How |
 | --- | --- |
 | Full tracks | Whole songs from Audius (independent artists, free, no key). Its streams send `Access-Control-Allow-Origin: *`, so Orbwave reads the real audio and LRCLIB timings apply as they are |
+| Spotify Premium | Optional. With `NEXT_PUBLIC_SPOTIFY_CLIENT_ID` set, the Full tracks tab offers a Spotify login (PKCE, no secret). The Web Playback SDK makes the tab a Spotify Connect device, so mainstream songs play whole and ad-free on the listener's own Premium account. Spotify streams the audio; Ondalyr only sends play, pause and seek, and LRCLIB timings apply as they are |
 | Song previews | iTunes Search previews, relayed same-origin through `/api/media` so the Web Audio analyser can read them |
 | Music videos | iTunes music-video previews, played on the stage with lyrics alongside |
 | Live radio | Radio Browser directory, HTTPS and non-HLS streams only, with a log of what each station airs (below) |
@@ -47,6 +48,8 @@ A 6-minute test run against 100 stations wrote 127 airings of 115 songs, 14 of t
 
 ## Setup
 
+To turn on Spotify: create an app at developer.spotify.com/dashboard, tick Web API and Web Playback SDK, add the redirect URI `https://ondalyr.vercel.app/listen` (and `http://127.0.0.1:3000/listen` for local work), add each listener's Spotify email under User Management, and set `NEXT_PUBLIC_SPOTIFY_CLIENT_ID`. The Client ID is public; no secret is used.
+
 ```bash
 npm install
 cp .env.example .env.local   # fill in GROQ_API_KEY and DATABASE_URL
@@ -74,7 +77,8 @@ Earlier runs caught two layout bugs that are now fixed: on phones the player gri
 
 ## Known limits
 
-- Full tracks come only from Audius, which is mostly independent artists. Mainstream songs and music videos are still 30-second iTunes previews.
+- Without Spotify Premium, full tracks come only from Audius, which is mostly independent artists, and mainstream songs and music videos are 30-second iTunes previews.
+- Spotify in Development Mode (February 2026 rules): the app owner must have Premium, at most five listeners can be added under User Management, and search returns 10 results per request (the tab asks for two pages). Spotify audio is DRM-protected, so Orbwave shows simulated motion for it. The login and playback path has not been tested end to end yet, because no Client ID is configured.
 - The radio log trusts what stations announce. A station that sends wrong or no metadata is logged wrong or not at all.
 - Lyrics come from LRCLIB. Many tracks in the iTunes trending list, especially low-profile uploads, have no entry there, and the player says so instead of showing a guess.
 - Re-timing needs `GROQ_API_KEY`. Without it, synced lyrics run from the start of the full track and drift from the clip.

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePlayer } from "./player";
 import { loadEpisodes, searchFull, searchPodcasts, searchRadio, searchSongs, searchVideos, type Item, type Show } from "@/lib/sources";
 import { airdrop, connect, recordListen } from "@/lib/solana";
+import { searchSpotify } from "@/lib/spotify";
 
 function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
@@ -65,12 +66,43 @@ function State({ err, loading }: { err: boolean; loading: boolean }) {
   return null;
 }
 
+// Shown only when a Spotify client id is configured.
+function SpotifyPanel() {
+  const { t, spotify, spotifyConnect, spotifyDisconnect } = usePlayer();
+  if (spotify === "off") return null;
+  if (spotify === "ready") {
+    return (
+      <p className="muted sp-line">
+        {t.spReady} <button className="link" onClick={spotifyDisconnect}>{t.spDisconnect}</button>
+      </p>
+    );
+  }
+  if (spotify === "starting") return <p className="muted sp-line">{t.spStarting}</p>;
+  const note = spotify === "premium" ? t.spPremium : spotify === "error" ? t.spFailed : t.spIntro;
+  return (
+    <div className="sp-box">
+      <p className="muted">{note}</p>
+      <button className="btn primary small" onClick={spotifyConnect}>{t.spConnect}</button>
+    </div>
+  );
+}
+
 export function FullView({ q }: { q: string }) {
-  const { t } = usePlayer();
+  const { t, spotify } = usePlayer();
+  const sp = useLoad(() => (spotify === "ready" ? searchSpotify(q) : Promise.resolve([] as Item[])), [q, spotify]);
   const songs = useLoad(() => searchFull(q), [q]);
   return (
     <div className="view">
       <h2>{q ? `“${q}”` : t.trending}</h2>
+      <SpotifyPanel />
+      {spotify === "ready" && (
+        <>
+          <h3>{t.spSection}</h3>
+          <State err={sp.err} loading={!sp.data} />
+          {sp.data && <Rows items={sp.data} />}
+          <h3>{t.audiusSection}</h3>
+        </>
+      )}
       <p className="muted lede">{t.fullIntro}</p>
       <State err={songs.err} loading={!songs.data} />
       {songs.data && <Tiles items={songs.data.slice(0, 6)} />}

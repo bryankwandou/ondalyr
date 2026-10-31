@@ -138,7 +138,7 @@ export function Stage() {
           ))}
         </div>
         {current.live && <span className="live-pill">{t.live}</span>}
-        {current.kind === "song" && <span className="meta-pill">{current.preview ? t.preview : t.fullTrack}</span>}
+        {current.kind === "song" && <span className="meta-pill">{current.preview ? t.preview : current.spotify ? `${t.fullTrack} · Spotify` : t.fullTrack}</span>}
       </div>
 
       <div className="stage-body">

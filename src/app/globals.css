@@ -399,3 +399,9 @@ h1, h2, h3 { font-family: var(--font-display), var(--font-geist-sans), sans-seri
   .stack { animation: none; }
   [data-reveal] { opacity: 1; transform: none; }
 }
+
+/* Spotify connect, on the Full tracks tab */
+.sp-box { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 16px 18px; margin: 4px 0 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); }
+.sp-box p { flex: 1 1 32ch; margin: 0; }
+.sp-line { margin: 0 0 16px; }
+.sp-line .link { margin-left: 8px; text-decoration: underline; }

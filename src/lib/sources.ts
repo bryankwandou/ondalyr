@@ -17,6 +17,8 @@ export interface Item {
   live: boolean;
   // A preview is a 30-second excerpt that starts mid-song; its lyrics need re-timing.
   preview?: boolean;
+  // Spotify track URI; played through the listener's Premium account, not src.
+  spotify?: string;
   durationSec?: number;
 }
 

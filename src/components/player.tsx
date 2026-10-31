@@ -5,10 +5,16 @@ import type { Item } from "@/lib/sources";
 import { dict, type Dict, type Lang } from "@/lib/i18n";
 import { fetchLyrics, type Lyrics } from "@/lib/lyrics";
 import { countPlay, countSeconds } from "@/lib/tally";
+import {
+  loadSpotifySdk, newSpotifyPlayer, spotifyApi, spotifyEnabled, spotifyFinishLogin, spotifyLinked, spotifyLogin, spotifyLogout,
+  type SpPlayer, type SpState,
+} from "@/lib/spotify";
 
 export type StageMode = "cover" | "video" | "orbwave";
 type LyricState = { status: "idle" | "loading" | "none" | "ready"; data?: Lyrics; offset: number; align: "none" | "pending" | "done" | "failed" };
 export type OnAir = { now: string | null; history: { title: string; at: string }[] };
+// off: no client id configured. out: not logged in. premium: account is not Premium.
+export type SpotifyStatus = "off" | "out" | "starting" | "ready" | "premium" | "error";
 
 interface Ctx {
   t: Dict;
@@ -26,6 +32,9 @@ interface Ctx {
   setMode(m: StageMode): void;
   lyrics: LyricState;
   onAir: OnAir | null;
+  spotify: SpotifyStatus;
+  spotifyConnect(): void;
+  spotifyDisconnect(): void;
   playList(list: Item[], at: number): void;
   toggle(): void;
   next(): void;
@@ -67,10 +76,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [lyrics, setLyrics] = useState<LyricState>({ status: "idle", offset: 0, align: "none" });
   const [listened, setListened] = useState(0);
   const [onAir, setOnAir] = useState<OnAir | null>(null);
+  const [spotify, setSpotify] = useState<SpotifyStatus>("off");
 
   const els = useRef<{ analysed: HTMLVideoElement; raw: HTMLVideoElement } | null>(null);
   const audio = useRef<{ ctx: AudioContext; an: AnalyserNode } | null>(null);
   const current = index >= 0 ? queue[index] ?? null : null;
+  // The SDK's listeners are attached once, so they read the latest values here.
+  const sp = useRef<{ player: SpPlayer; device: string; uri: string } | null>(null);
+  const queueRef = useRef(queue);
+  const currentRef = useRef(current);
+  queueRef.current = queue;
+  currentRef.current = current;
 
   useEffect(() => {
     try {
@@ -80,6 +96,57 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const m = localStorage.getItem("ondalyr.mode") as StageMode | null;
       if (m === "cover" || m === "video" || m === "orbwave") setModeState(m);
     } catch {}
+  }, []);
+
+  // Spotify: finish a login redirect, then register this tab as a Connect device.
+  useEffect(() => {
+    if (!spotifyEnabled) return;
+    let live = true;
+    let player: SpPlayer | null = null;
+    (async () => {
+      const err = await spotifyFinishLogin().catch(() => "token");
+      if (!live) return;
+      if (!spotifyLinked()) return setSpotify(err ? "error" : "out");
+      setSpotify("starting");
+      await loadSpotifySdk();
+      if (!live) return;
+      player = newSpotifyPlayer(0.9);
+      const p = player;
+      p.addListener("ready", ({ device_id }: { device_id: string }) => {
+        sp.current = { player: p, device: device_id, uri: "" };
+        setSpotify("ready");
+      });
+      p.addListener("not_ready", () => setSpotify("starting"));
+      p.addListener("account_error", () => setSpotify("premium"));
+      p.addListener("authentication_error", () => { spotifyLogout(); setSpotify("out"); });
+      p.addListener("initialization_error", () => setSpotify("error"));
+      p.addListener("playback_error", () => setError(true));
+      p.addListener("player_state_changed", (s: SpState | null) => {
+        const cur = currentRef.current;
+        if (!s || !sp.current || !cur?.spotify) return;
+        const tr = s.track_window.current_track;
+        const uri = tr.linked_from?.uri || tr.uri;
+        sp.current.uri = uri;
+        setPlaying(!s.paused);
+        setTime(s.position / 1000);
+        if (s.duration) setDuration(s.duration / 1000);
+        // Spotify moves through the queue by itself; follow it.
+        if (uri !== cur.spotify) {
+          const i = queueRef.current.findIndex((x) => x.spotify === uri);
+          if (i >= 0) setIndex(i);
+        }
+      });
+      p.connect();
+    })();
+    return () => { live = false; player?.disconnect(); sp.current = null; };
+  }, []);
+
+  const spotifyConnect = useCallback(() => { spotifyLogin(); }, []);
+  const spotifyDisconnect = useCallback(() => {
+    spotifyLogout();
+    sp.current?.player.disconnect();
+    sp.current = null;
+    setSpotify("out");
   }, []);
 
   const setLang = (l: Lang) => {
@@ -103,7 +170,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const active = useCallback((): HTMLVideoElement | null => {
-    if (!els.current || !current) return null;
+    if (!els.current || !current || current.spotify) return null;
     return current.analysable ? els.current.analysed : els.current.raw;
   }, [current]);
 
@@ -137,6 +204,38 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setTime(0);
     setDuration(0);
     setListened(0);
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: current.title,
+        artist: current.artist,
+        album: current.album || "",
+        artwork: current.art ? [{ src: current.art, sizes: "600x600" }] : [],
+      });
+    }
+
+    if (current.spotify) {
+      el.pause();
+      el.removeAttribute("src");
+      setDuration(current.durationSec || 0);
+      const s = sp.current;
+      if (!s) { setError(true); return; }
+      // Already there when Spotify advanced on its own.
+      if (s.uri !== current.spotify) {
+        s.uri = current.spotify;
+        const uris = queue.filter((x) => x.spotify).map((x) => x.spotify!);
+        spotifyApi(`/me/player/play?device_id=${s.device}`, {
+          method: "PUT",
+          body: JSON.stringify({ uris, offset: { uri: current.spotify } }),
+        }).catch(() => { setError(true); s.uri = ""; });
+      }
+      return;
+    }
+    // Leaving Spotify for another source: stop it, and forget its track.
+    if (sp.current) {
+      const s = sp.current;
+      s.uri = "";
+      s.player.getCurrentState().then((st) => { if (st && !st.paused) s.player.togglePlay(); }).catch(() => {});
+    }
     el.src = current.src;
     el.volume = volume;
     el.play().catch(() => setPlaying(false));
@@ -151,15 +250,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       ["ended", () => setIndex((i) => (i + 1 < queue.length ? i + 1 : i))],
     ];
     handlers.forEach(([e, f]) => on(e, f));
-
-    if ("mediaSession" in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: current.title,
-        artist: current.artist,
-        album: current.album || "",
-        artwork: current.art ? [{ src: current.art, sizes: "600x600" }] : [],
-      });
-    }
     return () => handlers.forEach(([e, f]) => el.removeEventListener(e, f));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
@@ -176,6 +266,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setListened((s) => s + 1);
       countSeconds(item, kind, 1);
     }, 1000);
+    return () => clearInterval(id);
+  }, [playing, current]);
+
+  // The SDK reports position only on changes, so ask for it while playing.
+  useEffect(() => {
+    if (!playing || !current?.spotify) return;
+    const id = setInterval(() => {
+      sp.current?.player.getCurrentState().then((s) => s && setTime(s.position / 1000)).catch(() => {});
+    }, 500);
     return () => clearInterval(id);
   }, [playing, current]);
 
@@ -227,6 +326,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playList = useCallback((list: Item[], at: number) => {
     getEls();
     if (list[at]?.analysable) ensureGraph();
+    // Unlocks audio for the SDK inside this click, before the play request lands.
+    if (list[at]?.spotify) sp.current?.player.activateElement().catch(() => {});
     setQueue(list);
     setIndex(at);
     if (list[at]?.hasVideo) setModeState("video");
@@ -234,6 +335,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [ensureGraph, getEls]);
 
   const toggle = useCallback(() => {
+    if (current?.spotify) { sp.current?.player.togglePlay().catch(() => {}); return; }
     const el = active();
     if (!el) return;
     if (current?.analysable) ensureGraph();
@@ -243,17 +345,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const next = useCallback(() => setIndex((i) => (i + 1 < queue.length ? i + 1 : i)), [queue.length]);
   const prev = useCallback(() => {
+    if (current?.spotify) {
+      const s = sp.current;
+      s?.player.getCurrentState().then((st) => {
+        if (st && st.position > 3000) s.player.seek(0);
+        else setIndex((i) => Math.max(0, i - 1));
+      }).catch(() => {});
+      return;
+    }
     const el = active();
     if (el && el.currentTime > 3) el.currentTime = 0;
     else setIndex((i) => Math.max(0, i - 1));
-  }, [active]);
+  }, [active, current]);
   const seek = useCallback((s: number) => {
+    if (current?.spotify) { sp.current?.player.seek(Math.max(0, s) * 1000).catch(() => {}); return; }
     const el = active();
     if (el && Number.isFinite(el.duration)) el.currentTime = Math.max(0, Math.min(el.duration, s));
-  }, [active]);
+  }, [active, current]);
   const setVolume = useCallback((v: number) => {
     setVol(v);
     if (els.current) { els.current.analysed.volume = v; els.current.raw.volume = v; }
+    sp.current?.player.setVolume(v).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -273,9 +385,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<Ctx>(() => ({
     t: dict[lang], lang, setLang, queue, index, current, playing, time, duration, volume, error,
-    mode, setMode, lyrics, onAir, playList, toggle, next, prev, seek, setVolume, media: active, bands, listened,
+    mode, setMode, lyrics, onAir, spotify, spotifyConnect, spotifyDisconnect, playList, toggle, next, prev, seek, setVolume, media: active, bands, listened,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [lang, queue, index, current, playing, time, duration, volume, error, mode, lyrics, onAir, playList, toggle, next, prev, seek, setVolume, active, bands, listened]);
+  }), [lang, queue, index, current, playing, time, duration, volume, error, mode, lyrics, onAir, spotify, spotifyConnect, spotifyDisconnect, playList, toggle, next, prev, seek, setVolume, active, bands, listened]);
 
   return (
     <PlayerCtx.Provider value={value}>
